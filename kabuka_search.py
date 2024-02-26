@@ -5,71 +5,67 @@ import os
 from calculation import per_calculation
 
 def get_stock_data(stock_code):
-    # 株価情報のURL
-    stock_url = f"https://kabutan.jp/stock/?code={stock_code}"
-    # 財務情報のURL
-    finance_url = f"https://kabutan.jp/stock/finance?code={stock_code}"
-    #Yahooファイナンス
-    yahoo_finance_url = f"https://finance.yahoo.co.jp/quote/{stock_code}.T"
-
     # 株価情報のページからデータを取得
-    response = requests.get(stock_url)
-    soup = BeautifulSoup(response.text, 'html.parser')
+    stock_url = f"https://kabutan.jp/stock/?code={stock_code}"
+    stock_soup = BeautifulSoup(requests.get(stock_url).text, 'html.parser')
+    # 財務情報のページからデータを取得
+    finance_url = f"https://kabutan.jp/stock/finance?code={stock_code}"
+    finance_soup = BeautifulSoup(requests.get(finance_url).text, 'html.parser')
+    # Yahooファイナンスからデータを取得
+    yahoo_finance_url = f"https://finance.yahoo.co.jp/quote/{stock_code}.T"
+    yahoo_soup = BeautifulSoup(requests.get(yahoo_finance_url).text, 'html.parser')
+
 
     # 株価を含む要素を探す
-    stock_price = get_data(soup, 'span', class_name='kabuka')
-
+    stock_price = get_data(stock_soup, 'span', class_name='kabuka')
     # PERを含む要素を探す
-    per_elem = soup.find('div', id='stockinfo_i3').find('td')
+    per_elem = stock_soup.find('div', id='stockinfo_i3').find('td')
     per = per_elem.get_text(strip=True) if per_elem else "情報なし"
 
     #テーブルを取得
-    finance_info_table = soup.find('div', id='kobetsu_right').find_all('table')[2]  # 3番目のテーブルを選択
+    finance_info_table = stock_soup.find('div', id='kobetsu_right').find_all('table')[2]  # 3番目のテーブルを選択
+    if finance_info_table.find('div', class_= "gyouseki_block"):
+        # 今季1株益を取得
+        now_oneP_elem = finance_info_table.find_all('tr')[2].find_all('td')[3]  # 2行目の4列目を選択
+        now_oneP = now_oneP_elem.get_text(strip=True) if now_oneP_elem else "情報なし"
+        # 来季1株益を取得
+        next_oneP_elem = finance_info_table.find_all('tr')[3].find_all('td')[3]  # 3行目の4列目を選択
+        next_oneP = next_oneP_elem.get_text(strip=True) if next_oneP_elem else "情報なし"
+    else:
+        now_oneP = "情報なし"
+        next_oneP = "情報なし"
 
-    # 今季1株益を取得
-    now_oneP_elem = finance_info_table.find_all('tr')[2].find_all('td')[3]  # 2行目の4列目を選択
-    now_oneP = now_oneP_elem.get_text(strip=True) if now_oneP_elem else "情報なし"
-    # 来季1株益を取得
-    next_oneP_elem = finance_info_table.find_all('tr')[3].find_all('td')[3]  # 3行目の4列目を選択
-    next_oneP = next_oneP_elem.get_text(strip=True) if next_oneP_elem else "情報なし"
+    # 財務情報のセクションを取得
+    finance_section = finance_soup.find('div', class_='fin_year_t0_d fin_year_result_d')
+    # 売上予想のデータを格納するためのリスト
+    sales_list = []
+    operating_list = []
 
-    # 財務情報のページからデータを取得
-    response = requests.get(finance_url)
-    soup = BeautifulSoup(response.text, 'html.parser')
+    # 対象の行インデックス：前期売上、今期売上予想、来季期売上
+    rows_indexes = [4, 5, 6]
 
-    # 前期営業益を取得
-    operating_income_elem = soup.find('div', class_='fin_year_t0_d fin_year_result_d').find_all('tr')[4].find_all('td')[1]
-    operating_incomeB = operating_income_elem.get_text(strip=True) if operating_income_elem else "情報なし"
+    # 各行インデックスに対してループ
+    if finance_section:
+        for index in rows_indexes:
+            # 指定された行と列から売上予想の要素を取得
+            operating_income_elem = finance_section.find_all('tr')[index].find_all('td')[1]
+            sales_forecast_elem = finance_section.find_all('tr')[index].find_all('td')[0]
 
-    # 今季営業益を取得
-    operating_income_elem = soup.find('div', class_='fin_year_t0_d fin_year_result_d').find_all('tr')[5].find_all('td')[1]
-    operating_incomeN = operating_income_elem.get_text(strip=True) if operating_income_elem else "情報なし"
-
-    # 来季営業益を取得
-    operating_income_elem = soup.find('div', class_='fin_year_t0_d fin_year_result_d').find_all('tr')[6].find_all('td')[1]
-    operating_incomeA = operating_income_elem.get_text(strip=True) if operating_income_elem else "情報なし"
+            operating_list.append(operating_income_elem.get_text(strip=True) if operating_income_elem else "情報なし")
+            sales_list.append(sales_forecast_elem.get_text(strip=True) if sales_forecast_elem else "情報なし")
+    else:
+        for index in rows_indexes:
+            operating_list.append("情報なし")
+            sales_list.append("情報なし")
+    #リストから個々の営業益を取り出す
+    operating_incomeB, operating_incomeN, operating_incomeA = operating_list
+    # リストから個々の売上予想を取り出す
+    sales_forecastB, sales_forecastN, sales_forecastA = sales_list
     
-    # #テーブルを取得
-    # sales_forecast_table = soup.find('div', id='finance_box').find_all('div')[4].find('table')  # 5番目のdiv内のテーブルを選択
-
-    #前期売上
-    sales_forecast_elem = soup.find('div', class_='fin_year_t0_d fin_year_result_d').find_all('tr')[4].find_all('td')[0]
-    sales_forecastB = sales_forecast_elem.get_text(strip=True) if sales_forecast_elem else "情報なし"
-    
-    # 今期売上予想を取得
-    sales_forecast_elem = soup.find('div', class_='fin_year_t0_d fin_year_result_d').find_all('tr')[5].find_all('td')[0]
-    sales_forecastN = sales_forecast_elem.get_text(strip=True) if sales_forecast_elem else "情報なし"
-
-    #来季期売上
-    sales_forecast_elem = soup.find('div', class_='fin_year_t0_d fin_year_result_d').find_all('tr')[6].find_all('td')[0] 
-    sales_forecastA = sales_forecast_elem.get_text(strip=True) if sales_forecast_elem else "情報なし"
-
-    #Yahooファイナンスからデータを取得
-    response = requests.get(yahoo_finance_url)
-    soupY = BeautifulSoup(response.text, 'html.parser')
 
     # 時価総額を取得
-    market_cap_elem = soupY.find('ul', class_="_3U1XwIwJ").find_all('li')[0].find('dl').find('dd').find('span').find('span').find('span')
+                                                    #株によって違うやつがある1XwIwJ
+    market_cap_elem = yahoo_soup.find('span', class_="1XwIwJ").find_all('li')[0].find('dl').find('dd').find('span').find('span').find('span')
     market_cap = market_cap_elem.get_text(strip=True) if market_cap_elem else "情報なし"
 
     # get_stock_data() 関数内で automatic_calculation() を呼び出す部分
@@ -162,14 +158,14 @@ def clean_numeric(value):
     cleaned_value = ''.join(filter(str.isdigit, value.replace('.', ''))) or '0'
     return float(cleaned_value)
 
-def get_data(soup, tag, class_name=None, id=None):
+def get_data(finance_soup, tag, class_name=None, id=None):
     try:
         if class_name:
-            elem = soup.find(tag, class_=class_name)
+            elem = finance_soup.find(tag, class_=class_name)
         elif id:
-            elem = soup.find(tag, id=id)
+            elem = finance_soup.find(tag, id=id)
         else:
-            elem = soup.find(tag)
+            elem = finance_soup.find(tag)
         return elem.get_text(strip=True) if elem else "情報なし"
     except Exception as e:
         return "情報なし"
