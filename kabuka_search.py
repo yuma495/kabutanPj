@@ -2,6 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 import os
+from calculation import per_calculation
 
 def get_stock_data(stock_code):
     # 株価情報のURL
@@ -173,63 +174,6 @@ def get_data(soup, tag, class_name=None, id=None):
     except Exception as e:
         return "情報なし"
 
-#TODO:マイナスの場合の考慮ができていない
-#目標PERを出す
-def per_calculation(next_increase_rat):
-    basePER = 0
-    targetPER = 0
-    if next_increase_rat <= 0:
-        basePER = None
-    elif 1 <= next_increase_rat <= 7:
-        basePER = 5
-    elif 8 <= next_increase_rat <= 12:
-        basePER = 10
-    elif 13 <= next_increase_rat <= 17:
-        basePER = 15
-    elif 18 <= next_increase_rat <= 22:
-        basePER = 20
-    elif 23 <= next_increase_rat <= 27:
-        basePER = 25
-    elif 28 <= next_increase_rat <= 32:
-        basePER = 30
-    elif 33 <= next_increase_rat <= 37:
-        basePER = 35
-    elif 38 <= next_increase_rat <= 45:
-        basePER = 40
-    elif 46 <= next_increase_rat <= 54:
-        basePER = 50
-    elif 55 <= next_increase_rat <= 64:
-        basePER = 60
-    else :
-        basePER = 70
-    
-    #2年で考える
-    if basePER == 5:
-        targetPER = 16.5
-    elif basePER == 10:
-        targetPER = 18.2
-    elif basePER == 15:
-        targetPER = 19.8
-    elif basePER == 20:
-        targetPER = 21.6
-    elif basePER == 25:
-        targetPER = 23.4
-    elif basePER == 30:
-        targetPER = 25.4
-    elif basePER == 35:
-        targetPER = 27.3
-    elif basePER == 40:
-        targetPER = 29.4
-    elif basePER == 40:
-        targetPER = 29.4
-    elif basePER == 50:
-        targetPER = 33.8
-    elif basePER == 60:
-        targetPER = 38.4
-    else:
-        targetPER = 43.4
-
-    return targetPER
 
 # ユーザー入力
 stock_codes = input("証券コードをカンマ区切りで入力してください（例: 7203,6758,9984）: ").split(',')
@@ -243,7 +187,29 @@ for code in stock_codes:
 # pandasのDataFrameを作成し、Excelファイルに保存
 df = pd.DataFrame(data)
 excel_file_path = 'stock_data.xlsx'
-df.to_excel(excel_file_path, index=False)
+
+try:
+    df.to_excel(excel_file_path, index=False)
+except PermissionError:
+    print(f"エラー: '{excel_file_path}' が開かれているため、ファイルを保存できません。")
+
+specific_data = pd.DataFrame({
+    "証券コード": [d["証券コード"] for d in data],
+    "上昇率①": [d["上昇率①"] for d in data],
+    "目標株価①": [d["目標株価①"] for d in data],
+    "上昇率②": [d["上昇率②"] for d in data],
+    "目標株価②": [d["目標株価②"] for d in data],
+    "PSR": [d["PSR"] for d in data],
+    "40%ルール": [d["40%ルール"] for d in data]
+})
+
+# "目標株価②"の値に基づいてデータフレームを降順にソート
+specific_data_sorted = specific_data.sort_values(by="目標株価②", ascending=False)
+
+# Excelファイルにデータフレームを書き込むためのExcelWriterを使用
+with pd.ExcelWriter(excel_file_path, engine='openpyxl', mode='a') as writer:
+    # ソートされたデータフレームを新しいシートに書き込む
+    specific_data_sorted.to_excel(writer, sheet_name='特定のデータ', index=False)
 
 print("データをExcelファイルに出力しました。")
 
