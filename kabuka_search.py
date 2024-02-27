@@ -2,7 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 import os
-from calculation import per_calculation
+from calculation import automatic_calculation
 
 def get_stock_data(stock_code):
     # 株価情報のページからデータを取得
@@ -24,6 +24,7 @@ def get_stock_data(stock_code):
 
     #テーブルを取得
     finance_info_table = stock_soup.find('div', id='kobetsu_right').find_all('table')[2]  # 3番目のテーブルを選択
+    #テーブルがない場合は「情報なし」
     if finance_info_table.find('div', class_= "gyouseki_block"):
         # 今季1株益を取得
         now_oneP_elem = finance_info_table.find_all('tr')[2].find_all('td')[3]  # 2行目の4列目を選択
@@ -35,33 +36,12 @@ def get_stock_data(stock_code):
         now_oneP = "情報なし"
         next_oneP = "情報なし"
 
-    # 財務情報のセクションを取得
-    finance_section = finance_soup.find('div', class_='fin_year_t0_d fin_year_result_d')
-    # 売上予想のデータを格納するためのリスト
-    sales_list = []
-    operating_list = []
-
-    # 対象の行インデックス：前期売上、今期売上予想、来季期売上
-    rows_indexes = [4, 5, 6]
-
-    # 各行インデックスに対してループ
-    if finance_section:
-        for index in rows_indexes:
-            # 指定された行と列から売上予想の要素を取得
-            operating_income_elem = finance_section.find_all('tr')[index].find_all('td')[1]
-            sales_forecast_elem = finance_section.find_all('tr')[index].find_all('td')[0]
-
-            operating_list.append(operating_income_elem.get_text(strip=True) if operating_income_elem else "情報なし")
-            sales_list.append(sales_forecast_elem.get_text(strip=True) if sales_forecast_elem else "情報なし")
-    else:
-        for index in rows_indexes:
-            operating_list.append("情報なし")
-            sales_list.append("情報なし")
+    ##財務情報を自動取得
+    sales_list, operating_list = finance_get(finance_soup)
     #リストから個々の営業益を取り出す
-    operating_incomeB, operating_incomeN, operating_incomeA = operating_list
+    operating_incomeB, operating_incomeN, operating_incomeA = sales_list
     # リストから個々の売上予想を取り出す
-    sales_forecastB, sales_forecastN, sales_forecastA = sales_list
-    
+    sales_forecastB, sales_forecastN, sales_forecastA = operating_list
 
     # 時価総額を取得
                                                     #株によって違うやつがある1XwIwJ
@@ -100,55 +80,35 @@ def get_stock_data(stock_code):
         **result
     }
 
-def automatic_calculation(params):
-    stock_price = params.get("stock_price")
-    per = params.get("per")
-    nowP = params.get("nowP")
-    nextP = params.get("nextP")
-    oiB = params.get("oiB")
-    oiN = params.get("oiN")
-    oiA = params.get("oiA")
-    sales_forecastB = params.get("sales_forecastB")
-    sales_forecastN = params.get("sales_forecastN")
-    sales_forecastA = params.get("sales_forecastA")
-    market_cap = params.get("market_cap")
 
 
-    middleP = (nowP + nextP) / 2  #中間
-    targetP1 = middleP * per        #目標株価①
-    rate1 = (targetP1 - stock_price) / stock_price #上昇率①
+#財務情報を取得
+def finance_get(finance_soup_data):
+    # 財務情報のセクションを取得
+    finance_section = finance_soup_data.find('div', class_='fin_year_t0_d fin_year_result_d')
+    # 売上予想のデータを格納するためのリスト
+    sales_list = []
+    operating_list = []
 
-    #oiNが0でわたってくる可能性があるため
-    if oiN != 0:
-        increase_rate =(((oiN - oiB)/oiB) + ((oiA - oiN)/oiA))/2 #増益率3期平均
-        next_increase_rat = (oiA - oiN)/oiN                      #来季増益率
+    # 対象の行インデックス：前期売上、今期売上予想、来季期売上
+    rows_indexes = [4, 5, 6]
+
+    # 各行インデックスに対してループ
+    if finance_section:
+        for index in rows_indexes:
+            # 指定された行と列から売上予想の要素を取得
+            operating_income_elem = finance_section.find_all('tr')[index].find_all('td')[1]
+            sales_forecast_elem = finance_section.find_all('tr')[index].find_all('td')[0]
+
+            operating_list.append(operating_income_elem.get_text(strip=True) if operating_income_elem else "情報なし")
+            sales_list.append(sales_forecast_elem.get_text(strip=True) if sales_forecast_elem else "情報なし")
     else:
-        next_increase_rat = 0
+        for index in rows_indexes:
+            operating_list.append("情報なし")
+            sales_list.append("情報なし")
 
-    #目標PER算出
-    targetPER=per_calculation(next_increase_rat)
+    return sales_list, operating_list
 
-    targetP2= targetPER * middleP                      #目標株価②
-    rate2=(targetP2 - stock_price) / stock_price       #上昇率②
-    yosouPER = stock_price / middleP                     #予想PER
-    psr = market_cap/sales_forecastN                   #psr
-    revenue_price=(((sales_forecastN-sales_forecastB)/sales_forecastB)+((sales_forecastA-sales_forecastN)/sales_forecastN))/2 #増収率
-    profit_Rate=oiN/sales_forecastN         #利益率
-    answer = profit_Rate + revenue_price    #40％ルール
-
-    #パーセンテージで表示する
-    return {
-        "目標株価①" :targetP1,
-        "上昇率①" :str(round(rate1 * 100, 1)) + "%",
-        "目標PER" :targetPER,
-        "目標株価②" :targetP2,
-        "上昇率②" :str(round(rate2 * 100, 1)) + "%",
-        "予想PER" :yosouPER,
-        "来季増益率" :str(round(next_increase_rat * 100, 1)) + "%" ,
-        "PSR" :psr,
-        "利益率" :str(round(profit_Rate * 100, 1)) + "%",
-        "40%ルール" :str(round(answer * 100, 2)) + "%"
-    }
 
 #余計な文字を除去する処理
 def clean_numeric(value):
@@ -157,19 +117,6 @@ def clean_numeric(value):
     # 非数値文字を除去（カンマ、円記号など）
     cleaned_value = ''.join(filter(str.isdigit, value.replace('.', ''))) or '0'
     return float(cleaned_value)
-
-def get_data(finance_soup, tag, class_name=None, id=None):
-    try:
-        if class_name:
-            elem = finance_soup.find(tag, class_=class_name)
-        elif id:
-            elem = finance_soup.find(tag, id=id)
-        else:
-            elem = finance_soup.find(tag)
-        return elem.get_text(strip=True) if elem else "情報なし"
-    except Exception as e:
-        return "情報なし"
-
 
 # ユーザー入力
 stock_codes = input("証券コードをカンマ区切りで入力してください（例: 7203,6758,9984）: ").split(',')

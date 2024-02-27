@@ -1,3 +1,56 @@
+#自動計算処理
+def automatic_calculation(params):
+    stock_price = params.get("stock_price")
+    per = params.get("per")
+    nowP = params.get("nowP")
+    nextP = params.get("nextP")
+    oiB = params.get("oiB")
+    oiN = params.get("oiN")
+    oiA = params.get("oiA")
+    sales_forecastB = params.get("sales_forecastB")
+    sales_forecastN = params.get("sales_forecastN")
+    sales_forecastA = params.get("sales_forecastA")
+    market_cap = params.get("market_cap")
+
+
+    middleP = (nowP + nextP) / 2  #中間
+    targetP1 = middleP * per        #目標株価①
+    rate1 = (targetP1 - stock_price) / stock_price #上昇率①
+
+    #oiNが0でわたってくる可能性があるため
+    if oiN != 0:
+        increase_rate =(((oiN - oiB)/oiB) + ((oiA - oiN)/oiA))/2 #増益率3期平均
+        next_increase_rat = (oiA - oiN)/oiN                      #来季増益率
+    else:
+        next_increase_rat = 0
+
+    #目標PER算出
+    targetPER=per_calculation(next_increase_rat)
+
+    targetP2= targetPER * middleP                      #目標株価②
+    rate2=(targetP2 - stock_price) / stock_price       #上昇率②
+    yosouPER = stock_price / middleP                     #予想PER
+    psr = market_cap/sales_forecastN                   #psr
+    revenue_price=(((sales_forecastN-sales_forecastB)/sales_forecastB)+((sales_forecastA-sales_forecastN)/sales_forecastN))/2 #増収率
+    profit_Rate=oiN/sales_forecastN         #利益率
+    answer = profit_Rate + revenue_price    #40％ルール
+
+    #パーセンテージで表示する
+    return {
+        "目標株価①" :targetP1,
+        "上昇率①" :str(round(rate1 * 100, 1)) + "%",
+        "目標PER" :targetPER,
+        "目標株価②" :targetP2,
+        "上昇率②" :str(round(rate2 * 100, 1)) + "%",
+        "予想PER" :yosouPER,
+        "来季増益率" :str(round(next_increase_rat * 100, 1)) + "%" ,
+        "PSR" :psr,
+        "利益率" :str(round(profit_Rate * 100, 1)) + "%",
+        "40%ルール" :str(round(answer * 100, 2)) + "%"
+    }
+
+
+
 #TODO:マイナスの場合の考慮ができていない
 #目標PERを出す
 def per_calculation(next_increase_rat):
@@ -55,3 +108,4 @@ def per_calculation(next_increase_rat):
         targetPER = 43.4
 
     return targetPER
+
